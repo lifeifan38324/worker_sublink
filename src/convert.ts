@@ -12,9 +12,6 @@ import { buildClashConfig } from "./targets/clash";
 import { buildSingboxConfig } from "./targets/singbox";
 import { fetchText, HttpError } from "./text-fetch";
 
-export const DEFAULT_TEMPLATE_URL =
-  "https://raw.githubusercontent.com/lifeifan38324/ConfigConvert/refs/heads/master/resource/template.yaml";
-
 export type GroupType = "select" | "url-test" | "fallback" | "load-balance";
 
 export interface ProxyGroupConfig {
@@ -383,7 +380,8 @@ export async function buildRulePlan(
 export interface ConvertParams {
   subscribeMapRaw: string;
   configRaw: string;
-  templateUrl?: string;
+  /** 基础模板地址，必填（由环境变量 TEMPLATE_URL 或参数 template 提供） */
+  templateUrl: string;
   target: "clash" | "singbox";
   allowLocal: boolean;
 }
@@ -411,8 +409,9 @@ async function fetchTemplate(url: string, allowLocal: boolean) {
   );
 }
 
-async function loadConfigText(configRaw: string, allowLocal: boolean): Promise<string> {  const raw = configRaw.trim();
-  if (!raw) throw new HttpError(500, "未配置分流配置文件（环境变量 CONVERT_CONFIG 或参数 config）");
+async function loadConfigText(configRaw: string, allowLocal: boolean): Promise<string> {
+  const raw = configRaw.trim();
+  if (!raw) throw new HttpError(500, "缺少分流配置：内容为空，应提供配置文件链接或 JSON");
   if (/^https?:\/\//i.test(raw)) {
     const file = await fetchText(raw, { allowLocal });
     return file.text;
@@ -425,10 +424,14 @@ export async function runConvert(params: ConvertParams): Promise<ConvertResult> 
 
   const entries = parseSubscriptionSource(params.subscribeMapRaw);
   if (entries.length === 0) {
-    throw new HttpError(
-      500,
-      "没有可用的订阅：页面未填写订阅链接，环境变量 SUBSCRIBE_MAP 也为空",
-    );
+    throw new HttpError(500, "缺少订阅列表：内容为空，应提供至少一个订阅链接");
+  }
+
+  // 模板只有生成 mihomo 配置时才用得上；sing-box 是重新生成的骨架
+  const needsTemplate = params.target === "clash";
+  const templateUrl = params.templateUrl.trim();
+  if (needsTemplate && !templateUrl) {
+    throw new HttpError(500, "缺少基础模板：模板链接为空");
   }
 
   const configText = await loadConfigText(params.configRaw, params.allowLocal);
@@ -437,7 +440,7 @@ export async function runConvert(params: ConvertParams): Promise<ConvertResult> 
 
   const [{ nodes, results }, templateFile] = await Promise.all([
     fetchSubscriptions(entries, params.allowLocal),
-    fetchTemplate(params.templateUrl || DEFAULT_TEMPLATE_URL, params.allowLocal),
+    needsTemplate ? fetchTemplate(templateUrl, params.allowLocal) : Promise.resolve(null),
   ]);
 
   if (nodes.length === 0) {
@@ -466,6 +469,7 @@ export async function runConvert(params: ConvertParams): Promise<ConvertResult> 
       warnings.push(`sing-box 没有对应语法的规则类型，已跳过：${built.skippedRules.join(", ")}`);
     }
   } else {
+    if (!templateFile) throw new HttpError(500, "缺少基础模板：未能加载模板文件");
     content = buildClashConfig(templateFile.text, nodes, groups, clashRules);
   }
 

@@ -1,4 +1,4 @@
-import { DEFAULT_TEMPLATE_URL, runConvert } from "./convert";
+import { runConvert } from "./convert";
 import { parseSubscriptionSource } from "./subscription";
 import { HttpError } from "./text-fetch";
 
@@ -38,6 +38,40 @@ function maskSecrets(value: string): string {
 function clip(value: string, max = 160): string {
   const flat = value.replace(/\s+/g, " ").trim();
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
+}
+
+/** 必填配置缺失时的统一报错：指明环境变量名、参数名和两种补救方式 */
+function missingConfig(envName: string, paramName: string, label: string): HttpError {
+  return new HttpError(
+    500,
+    `缺少${label}：环境变量 ${envName} 未配置，请求参数 ${paramName} 也没有提供。` +
+      `本地把它写进 .dev.vars，线上用 npx wrangler secret put ${envName} 设置，或在请求中带上 ${paramName}。`,
+  );
+}
+
+/** 取值顺序：请求参数 > 环境变量，都没有时返回空字符串 */
+function pickOptional(paramValue: string | null, envValue: string | undefined): string {
+  return (paramValue ?? "").trim() || (envValue ?? "").trim();
+}
+
+function resolveRequired(
+  paramValue: string | null,
+  envValue: string | undefined,
+  envName: string,
+  paramName: string,
+  label: string,
+): string {
+  const value = pickOptional(paramValue, envValue);
+  if (!value) throw missingConfig(envName, paramName, label);
+  return value;
+}
+
+/** 布尔型环境变量只接受 true / false，写错直接报错，避免被静默当成 false */
+function readFlag(envValue: string | undefined, envName: string): boolean {
+  const raw = (envValue ?? "").trim().toLowerCase();
+  if (!raw || raw === "false") return false;
+  if (raw === "true") return true;
+  throw new HttpError(500, `环境变量 ${envName} 只接受 true 或 false，当前值是「${envValue}」`);
 }
 
 /**
@@ -93,12 +127,14 @@ function buildPlaceholders(env: Env): Record<string, string> {
 
   const template = env.TEMPLATE_URL
     ? clip(maskSecrets(env.TEMPLATE_URL))
-    : clip(DEFAULT_TEMPLATE_URL);
+    : "未配置：生成 mihomo 配置前请设置环境变量 TEMPLATE_URL，或在此填入模板链接";
 
   const note = [
     `订阅：${subCount > 0 ? `环境变量已配置 ${subCount} 条，留空即使用它` : "环境变量未配置，必须填写"}`,
     `分流配置：${env.CONVERT_CONFIG ? "环境变量已配置，留空即使用它" : "环境变量未配置，必须填写"}`,
-    `基础规则：${env.TEMPLATE_URL ? "环境变量已配置，默认用它" : "使用内置默认模板"}`,
+    `基础规则：${
+      env.TEMPLATE_URL ? "环境变量已配置，留空即使用它" : "环境变量未配置，生成 mihomo 配置时必须填写"
+    }`,
   ].join(" · ");
 
   return {
@@ -131,7 +167,6 @@ async function servePage(request: Request, env: Env): Promise<Response> {
 export default {
   async fetch(request, env, _ctx): Promise<Response> {
     const url = new URL(request.url);
-    const allowLocal = env.ALLOW_LOCAL_FETCH === "true";
 
     if (url.pathname === "/api/health") {
       return json({ status: "ok", runtime: "workerd" });
@@ -147,17 +182,34 @@ export default {
 
     try {
       if (url.pathname === "/api/convert") {
-        // 页面提交的订阅是「名称 链接」行文本；没带就用环境变量
-        const subsParam = (url.searchParams.get("subs") ?? "").trim();
-        const subscribeMapRaw =
-          subsParam || env.SUBSCRIBE_MAP || env.subscribe_map || "";
+        // 校验顺序按依赖重要性来：先订阅，再分流配置，最后才是只在 mihomo 用得到的模板
+        const subscribeMapRaw = resolveRequired(
+          url.searchParams.get("subs"),
+          env.SUBSCRIBE_MAP || env.subscribe_map,
+          "SUBSCRIBE_MAP",
+          "subs",
+          "订阅列表",
+        );
+        const configRaw = resolveRequired(
+          url.searchParams.get("config"),
+          env.CONVERT_CONFIG,
+          "CONVERT_CONFIG",
+          "config",
+          "分流配置",
+        );
+        const target = pickTarget(url.searchParams.get("target"), request.headers.get("user-agent"));
+        // 模板只在生成 mihomo 配置时参与拼接，sing-box 是重新生成的骨架，不需要它
+        const templateUrl = pickOptional(url.searchParams.get("template"), env.TEMPLATE_URL);
+        if (target === "clash" && !templateUrl) {
+          throw missingConfig("TEMPLATE_URL", "template", "基础模板");
+        }
 
         const result = await runConvert({
           subscribeMapRaw,
-          configRaw: url.searchParams.get("config") || env.CONVERT_CONFIG || "",
-          templateUrl: url.searchParams.get("template") || env.TEMPLATE_URL || DEFAULT_TEMPLATE_URL,
-          target: pickTarget(url.searchParams.get("target"), request.headers.get("user-agent")),
-          allowLocal,
+          configRaw,
+          templateUrl,
+          target,
+          allowLocal: readFlag(env.ALLOW_LOCAL_FETCH, "ALLOW_LOCAL_FETCH"),
         });
 
         if (url.searchParams.get("stats") === "1") {
