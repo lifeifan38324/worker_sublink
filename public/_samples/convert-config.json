@@ -1,0 +1,38 @@
+{
+  "ruleset": [
+    {
+      "use-proxy": "pikpak",
+      "rule-url": "https://raw.githubusercontent.com/lifeifan38324/ClashConfig/main/proxy/ProxyDevelopingCountries.list"
+    },
+    {
+      "use-proxy": "台湾测速",
+      "rule-url": "https://raw.githubusercontent.com/lifeifan38324/ClashConfig/main/proxy/Proxy.list"
+    }
+  ],
+  "proxy_group": [
+    {
+      "name": "pikpak",
+      "type": "select",
+      "other-groups": ["台湾测速", "香港测速"],
+      "regex-filter": "(台|TW|香|HK)"
+    },
+    {
+      "name": "台湾测速",
+      "type": "ur-test",
+      "other-groups": [],
+      "regex-filter": "(台|TW)",
+      "test-utl": "http://www.gstatic.com/generate_204",
+      "interval": 600,
+      "tolerance": 300
+    },
+    {
+      "name": "香港测速",
+      "type": "ur-test",
+      "other-groups": [],
+      "regex-filter": "(香|HK)",
+      "test-utl": "http://www.gstatic.com/generate_204",
+      "interval": 600,
+      "tolerance": 300
+    }
+  ]
+}

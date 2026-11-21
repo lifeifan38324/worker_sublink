@@ -1,0 +1,4 @@
+URL-REGEX,^https?://(www.)?example.com/xyz
+DOMAIN-SUFFIX,ok.example.com
+URL-REGEX,(?i)foo
+USER-AGENT,paypal*

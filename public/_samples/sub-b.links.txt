@@ -1,0 +1,5 @@
+ss://YWVzLTI1Ni1nY206cGFzczU=@jp1.example.com:8388#日本05
+vmess://eyJ2IjoiMiIsInBzIjoi5pel5pysMDYiLCJhZGQiOiJqcDUuZXhhbXBsZS5jb20iLCJwb3J0IjoiNDQzIiwiaWQiOiI2NjY2NjY2Ni03Nzc3LTg4ODgtOTk5OS0wMDAwMDAwMDAwMDAiLCJhaWQiOiIwIiwic2N5IjoiYXV0byIsIm5ldCI6IndzIiwidHlwZSI6Im5vbmUiLCJob3N0IjoianA1LmV4YW1wbGUuY29tIiwicGF0aCI6Ii92bSIsInRscyI6InRscyJ9
+trojan://pass7@jp2.example.com:443?sni=jp2.example.com&allowInsecure=1#日本07
+vless://77777777-8888-9999-aaaa-bbbbbbbbbbbb@jp3.example.com:443?encryption=none&security=tls&sni=jp3.example.com&type=ws&path=%2Fws&host=jp3.example.com#日本08
+hysteria2://pass9@jp4.example.com:443?sni=jp4.example.com&insecure=1#日本09

@@ -1,0 +1,516 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>订阅转换</title>
+    <style>
+      :root {
+        --bg: #ffffff;
+        --fg: #1a1a18;
+        --muted: #6b6a64;
+        --line: #e3e1da;
+        --soft: #f6f5f1;
+        --accent: #185fa5;
+        --warn-bg: #fdf8ec;
+        --warn-line: #ecd9a8;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 44px 20px 80px;
+        background: var(--bg);
+        color: var(--fg);
+        font: 400 15px/1.65 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+      }
+      main { max-width: 860px; margin: 0 auto; }
+      h1 { font-size: 21px; font-weight: 500; margin: 0 0 6px; letter-spacing: 0.2px; }
+      .sub { color: var(--muted); font-size: 13px; margin: 0 0 8px; }
+      .env {
+        font-size: 12px;
+        color: var(--muted);
+        background: var(--soft);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 8px 11px;
+        margin: 0 0 26px;
+        line-height: 1.7;
+      }
+      form { display: grid; gap: 18px; }
+      .field { display: grid; gap: 6px; }
+      .label { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+      .label span { font-size: 13px; font-weight: 500; }
+      .label em { font-style: normal; font-size: 12px; color: var(--muted); }
+      textarea, input[type="text"], select {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        font: inherit;
+        font-size: 14px;
+        background: var(--bg);
+        color: var(--fg);
+        resize: vertical;
+      }
+      textarea { min-height: 84px; line-height: 1.6; }
+      textarea::placeholder, input::placeholder { color: #a9a79f; }
+      textarea:focus, input:focus, select:focus {
+        outline: 2px solid rgba(24, 95, 165, 0.2);
+        border-color: var(--accent);
+      }
+      .row2 { display: grid; gap: 18px; grid-template-columns: 1fr 200px; }
+      .actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+      button {
+        padding: 11px 20px;
+        border: 1px solid var(--accent);
+        background: var(--accent);
+        color: #fff;
+        border-radius: 9px;
+        font: inherit;
+        font-size: 14px;
+        cursor: pointer;
+      }
+      button:disabled { opacity: 0.55; cursor: default; }
+      button.ghost {
+        background: transparent;
+        color: var(--accent);
+        border-color: var(--line);
+        padding: 9px 14px;
+        font-size: 13px;
+      }
+      button.mini {
+        background: transparent;
+        color: var(--muted);
+        border-color: var(--line);
+        padding: 6px 10px;
+        font-size: 12px;
+      }
+      a.ghost {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 9px 14px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        color: var(--accent);
+        font-size: 13px;
+        text-decoration: none;
+        white-space: nowrap;
+        background: var(--bg);
+      }
+      a.ghost:hover { border-color: var(--accent); }
+      .tip { font-size: 12px; color: var(--muted); }
+      .err {
+        margin: 22px 0 0;
+        padding: 12px 14px;
+        border: 1px solid #f0c2c2;
+        background: #fdf3f3;
+        border-radius: 9px;
+        font-size: 13px;
+        color: #8c2f2f;
+        white-space: pre-wrap;
+      }
+      #output { margin-top: 30px; }
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 11px;
+        padding: 14px 16px;
+        display: grid;
+        gap: 10px;
+      }
+      .card h2 { font-size: 13px; font-weight: 500; margin: 0; color: var(--muted); }
+      .card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+      .linkrow { display: flex; gap: 8px; align-items: stretch; }
+      .linkrow input { flex: 1 1 auto; min-width: 0; font: 400 12.5px/1.5 ui-monospace, Consolas, monospace; }
+      .linkrow button, .linkrow a.ghost { flex: 0 0 auto; white-space: nowrap; }
+      .stats { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); }
+      .stats b { color: var(--fg); font-weight: 500; }
+      .subs { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px; color: var(--muted); }
+      .subs span { border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; }
+      .warns {
+        background: var(--warn-bg);
+        border: 1px solid var(--warn-line);
+        border-radius: 9px;
+        padding: 10px 14px 12px;
+        font-size: 12.5px;
+        color: #6b5620;
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+      .warns-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 6px;
+      }
+      .warns-head .title {
+        font-size: 13px;
+        font-weight: 500;
+        color: #5e4a15;
+        line-height: 1.5;
+      }
+      .warns-head .title b {
+        font-weight: 500;
+        font-size: 11px;
+        background: #f2e3bd;
+        border-radius: 999px;
+        padding: 1px 7px;
+        margin-left: 6px;
+        vertical-align: 1px;
+      }
+      .warns-head .why { font-size: 11.5px; color: #8a7538; margin-top: 1px; }
+      .warns ul { margin: 0; padding-left: 18px; min-width: 0; }
+      .warns li { margin: 3px 0; overflow-wrap: anywhere; word-break: break-word; }
+      .warns .mini {
+        flex: 0 0 auto;
+        background: #fffdf6;
+        color: #6b5620;
+        border-color: var(--warn-line);
+      }
+      .warns .mini:hover { border-color: #c8ac6d; }
+      pre {
+        margin: 0;
+        padding: 14px;
+        background: #1d1f21;
+        color: #e8e6df;
+        border-radius: 9px;
+        font: 400 12px/1.65 ui-monospace, Consolas, monospace;
+        max-height: 420px;
+        overflow: auto;
+        white-space: pre;
+      }
+      .hint { margin-top: 32px; font-size: 12px; color: var(--muted); line-height: 1.9; }
+      code {
+        background: var(--soft);
+        border: 1px solid var(--line);
+        padding: 1px 5px;
+        border-radius: 4px;
+        font-size: 11.5px;
+      }
+      @media (max-width: 620px) {
+        .row2 { grid-template-columns: 1fr; }
+        body { padding: 28px 16px 60px; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>订阅转换</h1>
+      <p class="sub">聚合多个机场订阅，按分流配置生成 mihomo 或 sing-box 配置。</p>
+      <p class="env">__ENV_NOTE__</p>
+
+      <form id="form">
+        <div class="field">
+          <div class="label">
+            <span>订阅链接</span>
+            <em>每行一条：名称 链接，名称可省略</em>
+          </div>
+          <textarea
+            id="subs"
+            rows="4"
+            spellcheck="false"
+            autocomplete="off"
+            placeholder="__SUBS_PLACEHOLDER__"
+          ></textarea>
+          <div class="tip">留空则使用环境变量 SUBSCRIBE_MAP 中的订阅；节点名会自动加上「名称_」前缀。</div>        </div>
+
+        <div class="field">
+          <div class="label"><span>客户端</span></div>
+          <select id="target">
+            <option value="mihomo" selected>mihomo（Clash.Meta / Clash Verge）</option>
+            <option value="singbox">sing-box</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <div class="label">
+            <span>分流配置</span>
+            <em>配置链接，或直接粘贴 JSON</em>
+          </div>
+          <textarea
+            id="config"
+            rows="3"
+            spellcheck="false"
+            autocomplete="off"
+            placeholder="__CONFIG_PLACEHOLDER__"
+          ></textarea>
+          <div class="tip">包含 proxy_group 与 ruleset 两段；留空则使用环境变量 CONVERT_CONFIG。</div>
+        </div>
+
+        <div class="field">
+          <div class="label">
+            <span>基础规则配置</span>
+            <em>模板文件链接</em>
+          </div>
+          <textarea
+            id="template"
+            rows="2"
+            spellcheck="false"
+            autocomplete="off"
+            placeholder="__TEMPLATE_PLACEHOLDER__"
+          ></textarea>
+          <div class="tip">提供 DNS、TUN 等基础字段，转换时会保留注释并替换节点、分组、规则三段。留空则使用环境变量 TEMPLATE_URL。</div>
+        </div>
+
+        <div class="actions">
+          <button id="submit" type="submit">生成订阅链接</button>
+          <button id="reset" type="button" class="ghost">清空</button>
+        </div>
+      </form>
+
+      <div id="error" class="err" hidden></div>
+
+      <section id="output" hidden>
+        <div class="card">
+          <h2>订阅链接</h2>
+          <div class="linkrow">
+            <input id="result-url" type="text" readonly spellcheck="false" />
+            <button id="copy" type="button" class="ghost">复制</button>
+            <a id="download" class="ghost" href="#" download>下载</a>
+          </div>
+          <div class="stats" id="stats"></div>
+          <div class="subs" id="subs-list"></div>
+        </div>
+
+        <div id="warn-box" class="warns" style="margin-top: 14px" hidden>
+          <div class="warns-head">
+            <div>
+              <div class="title">转换提示<b id="warn-count">0 条</b></div>
+              <div class="why">不影响配置生成，仅说明哪些内容被跳过、替换或降级</div>
+            </div>
+            <button id="copy-warns" type="button" class="mini">复制</button>
+          </div>
+          <ul id="warns"></ul>
+        </div>
+
+        <div class="card" style="margin-top: 14px">
+          <div class="card-head">
+            <h2 id="preview-title">配置预览（YAML）</h2>
+            <button id="copy-preview" type="button" class="mini" title="复制完整配置（预览区只显示前 120 行）">复制</button>
+          </div>
+          <pre id="preview"></pre>
+        </div>
+      </section>
+
+      <p class="hint">
+        生成的地址可直接填进客户端作为订阅；未填写的字段不会出现在请求参数里，由服务端回落到环境变量。
+        也可以手动调用：<code>GET /api/convert?target=mihomo&amp;subs=...</code>，加 <code>&amp;stats=1</code> 返回统计 JSON。
+      </p>
+    </main>
+
+    <script>
+      const form = document.getElementById("form");
+      const subsEl = document.getElementById("subs");
+      const targetEl = document.getElementById("target");
+      const configEl = document.getElementById("config");
+      const templateEl = document.getElementById("template");
+      const submitBtn = document.getElementById("submit");
+      const resetBtn = document.getElementById("reset");
+      const errorEl = document.getElementById("error");
+      const outputEl = document.getElementById("output");
+      const resultUrlEl = document.getElementById("result-url");
+      const copyBtn = document.getElementById("copy");
+      const downloadLink = document.getElementById("download");
+      const statsEl = document.getElementById("stats");
+      const subsListEl = document.getElementById("subs-list");
+      const warnBox = document.getElementById("warn-box");
+      const warnsEl = document.getElementById("warns");
+      const warnCountEl = document.getElementById("warn-count");
+      const copyWarnsBtn = document.getElementById("copy-warns");
+      const copyPreviewBtn = document.getElementById("copy-preview");
+      const previewEl = document.getElementById("preview");
+      const previewTitle = document.getElementById("preview-title");
+
+      let lastWarnings = [];
+      let lastConfigText = "";
+
+      const fmtSize = (n) =>
+        n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFixed(1) + " KB" : (n / 1048576).toFixed(2) + " MB";
+
+      /** 带降级方案的复制：navigator.clipboard 不可用时回退到 execCommand */
+      async function copyText(text, btn) {
+        if (!text) return;
+        if (!btn.dataset.label) btn.dataset.label = btn.textContent.trim();
+        let ok = true;
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch {
+          const area = document.createElement("textarea");
+          area.value = text;
+          area.setAttribute("readonly", "");
+          area.style.position = "fixed";
+          area.style.top = "-1000px";
+          area.style.opacity = "0";
+          document.body.appendChild(area);
+          area.select();
+          try {
+            ok = document.execCommand("copy");
+          } catch {
+            ok = false;
+          }
+          area.remove();
+        }
+        btn.textContent = ok ? "已复制" : "复制失败";
+        setTimeout(() => (btn.textContent = btn.dataset.label), 1600);
+      }
+
+      function showError(msg) {
+        errorEl.textContent = msg;
+        errorEl.hidden = false;
+      }
+
+      function buildUrl() {
+        const params = new URLSearchParams();
+        const subs = subsEl.value.trim();
+        if (subs) params.set("subs", subs);
+        params.set("target", targetEl.value);
+        const config = configEl.value.trim();
+        if (config) params.set("config", config);
+        const template = templateEl.value.trim();
+        if (template) params.set("template", template);
+        return location.origin + "/api/convert?" + params.toString();
+      }
+
+      function renderStats(stats) {
+        statsEl.replaceChildren();
+        if (!stats) return;
+        const items = [
+          ["节点", stats.nodes],
+          ["分组", stats.groups],
+          ["规则", stats.rules],
+          ["耗时", stats.elapsedMs + " ms"],
+          ["体积", fmtSize(stats.bytes)],
+        ];
+        for (const [label, value] of items) {
+          const el = document.createElement("span");
+          el.innerHTML = label + " <b>" + value + "</b>";
+          statsEl.appendChild(el);
+        }
+      }
+
+      function renderSubs(stats) {
+        subsListEl.replaceChildren();
+        if (!stats || !Array.isArray(stats.subscriptions)) return;
+        for (const sub of stats.subscriptions) {
+          const el = document.createElement("span");
+          el.textContent = sub.name + " · " + sub.nodeCount + " 节点 · " + sub.format;
+          subsListEl.appendChild(el);
+        }
+      }
+
+      /** 响应头里是 percent 编码的 JSON 数组；旧格式是 " | " 分隔的纯文本，一并兼容 */
+      function parseWarnings(raw) {
+        if (!raw) return [];
+        let decoded;
+        try {
+          decoded = decodeURIComponent(raw);
+        } catch {
+          return [raw];
+        }
+        try {
+          const arr = JSON.parse(decoded);
+          if (Array.isArray(arr)) return arr.map((item) => String(item)).filter(Boolean);
+        } catch {}
+        return decoded.split(" | ").filter(Boolean);
+      }
+
+      function renderWarnings(lines) {
+        warnsEl.replaceChildren();
+        lastWarnings = lines;
+        for (const line of lines) {
+          const li = document.createElement("li");
+          li.textContent = line;
+          warnsEl.appendChild(li);
+        }
+        warnCountEl.textContent = lines.length + " 条";
+        warnBox.hidden = lines.length === 0;
+      }
+
+      function renderPreview(text, target) {
+        lastConfigText = text;
+        previewTitle.textContent = target === "singbox" ? "配置预览（JSON）" : "配置预览（YAML）";
+        const lines = text.split("\n");
+        const clipped = lines.slice(0, 120).join("\n");
+        previewEl.textContent = clipped + (lines.length > 120 ? "\n…（共 " + lines.length + " 行，已截断）" : "");
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        errorEl.hidden = true;
+        outputEl.hidden = true;
+        submitBtn.disabled = true;
+        submitBtn.textContent = "生成中…";
+
+        const started = Date.now();
+        const url = buildUrl();
+
+        try {
+          const res = await fetch(url, { headers: { accept: "*/*" } });
+          const text = await res.text();
+
+          if (!res.ok) {
+            let message = text.slice(0, 400);
+            try {
+              message = JSON.parse(text).error || message;
+            } catch {}
+            showError("生成失败（" + res.status + "）：" + message);
+            return;
+          }
+
+          let stats = null;
+          const rawStats = res.headers.get("x-convert-stats");
+          if (rawStats) {
+            try {
+              stats = JSON.parse(decodeURIComponent(rawStats));
+            } catch {}
+          }
+
+          resultUrlEl.value = url;
+          renderStats(stats);
+          renderSubs(stats);
+          renderWarnings(parseWarnings(res.headers.get("x-convert-warnings") || ""));
+          renderPreview(text, targetEl.value);
+
+          const blob = new Blob([text], { type: res.headers.get("content-type") || "text/plain" });
+          const filename = targetEl.value === "singbox" ? "config.json" : "config.yaml";
+          if (downloadLink.dataset.blob) URL.revokeObjectURL(downloadLink.dataset.blob);
+          const blobUrl = URL.createObjectURL(blob);
+          downloadLink.dataset.blob = blobUrl;
+          downloadLink.href = blobUrl;
+          downloadLink.download = filename;
+
+          outputEl.hidden = false;
+          if (!stats) {
+            statsEl.innerHTML = "<span>耗时 <b>" + (Date.now() - started) + " ms</b></span>";
+          }
+        } catch (err) {
+          showError("网络异常：" + (err && err.message ? err.message : String(err)));
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = "生成订阅链接";
+        }
+      });
+
+      copyBtn.addEventListener("click", () => copyText(resultUrlEl.value, copyBtn));
+
+      copyWarnsBtn.addEventListener("click", () => {
+        copyText(lastWarnings.map((line) => "- " + line).join("\n"), copyWarnsBtn);
+      });
+
+      copyPreviewBtn.addEventListener("click", () => copyText(lastConfigText, copyPreviewBtn));
+
+      resetBtn.addEventListener("click", () => {
+        subsEl.value = "";
+        configEl.value = "";
+        templateEl.value = "";
+        targetEl.value = "mihomo";
+        errorEl.hidden = true;
+        outputEl.hidden = true;
+        warnBox.hidden = true;
+        lastWarnings = [];
+        lastConfigText = "";
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,2 @@
+DOMAIN,bbb.example.com
+IP-CIDR,10.9.0.0/16,no-resolve

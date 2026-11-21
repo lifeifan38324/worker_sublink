@@ -1,0 +1,42 @@
+port: 7890
+proxies:
+  - name: 台湾01
+    type: ss
+    server: tw1.example.com
+    port: 443
+    cipher: aes-256-gcm
+    password: pass1
+    udp: true
+  - name: 香港02
+    type: trojan
+    server: hk1.example.com
+    port: 443
+    password: pass2
+    sni: hk1.example.com
+    skip-cert-verify: true
+  - name: 美国03
+    type: vmess
+    server: us1.example.com
+    port: 443
+    uuid: 11111111-2222-3333-4444-555555555555
+    alterId: 0
+    cipher: auto
+    tls: true
+    network: ws
+    ws-opts:
+      path: /ws
+      headers:
+        Host: us1.example.com
+  - name: 新加坡04
+    type: hysteria2
+    server: sg1.example.com
+    port: 443
+    password: pass4
+    sni: sg1.example.com
+proxy-groups:
+  - name: 占位组
+    type: select
+    proxies:
+      - DIRECT
+rules:
+  - MATCH,DIRECT

@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "worker-sublink",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "ALLOW_LOCAL_FETCH": "false",
+    "SUBSCRIBE_MAP": "",
+    "subscribe_map": "",
+    "CONVERT_CONFIG": "",
+    "TEMPLATE_URL": ""
+  },
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    // 首页要把环境变量注入成占位符提示，必须先经过 Worker 再回落到静态资源
+    "run_worker_first": true
+  }
+}

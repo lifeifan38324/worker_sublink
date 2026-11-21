@@ -1,0 +1,3 @@
+DOMAIN-SUFFIX,aaa.example.com
+DOMAIN-KEYWORD,aaakey
++.a-suffix.example.com

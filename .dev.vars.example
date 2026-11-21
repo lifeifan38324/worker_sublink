@@ -1,0 +1,15 @@
+# 复制为 .dev.vars 后填入真实值；.dev.vars 不会被提交
+# 线上用 `npx wrangler secret put 变量名` 写入
+
+# 本地开发时允许拉取 127.0.0.1 等内网地址（仅测试用，线上必须保持 false）
+ALLOW_LOCAL_FETCH=true
+
+# 订阅列表，格式 [{name=名字,url=订阅链接},{...}]，也可用 JSON 数组
+# 页面上填了订阅就以页面为准，留空才用这里
+SUBSCRIBE_MAP=[{name=机场A,url=https://example.com/api/v1/client/subscribe?token=REPLACE_ME}]
+
+# 分流配置文件：URL，或直接写 JSON（含 proxy_group 与 ruleset 两段）
+CONVERT_CONFIG=https://example.com/config.json
+
+# 基础模板 yaml：提供 DNS、TUN 等字段
+TEMPLATE_URL=https://example.com/template.yaml
