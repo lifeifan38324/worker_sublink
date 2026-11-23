@@ -129,11 +129,20 @@ function buildPlaceholders(env: Env): Record<string, string> {
     ? clip(maskSecrets(env.TEMPLATE_URL))
     : "未配置：生成 mihomo 配置前请设置环境变量 TEMPLATE_URL，或在此填入模板链接";
 
+  const sboxTemplate = env.SINGBOX_TEMPLATE_URL
+    ? clip(maskSecrets(env.SINGBOX_TEMPLATE_URL))
+    : "未配置：生成 sing-box 配置前请设置环境变量 SINGBOX_TEMPLATE_URL，或在此填入基础配置链接";
+
   const note = [
     `订阅：${subCount > 0 ? `环境变量已配置 ${subCount} 条，留空即使用它` : "环境变量未配置，必须填写"}`,
     `分流配置：${env.CONVERT_CONFIG ? "环境变量已配置，留空即使用它" : "环境变量未配置，必须填写"}`,
     `基础规则：${
       env.TEMPLATE_URL ? "环境变量已配置，留空即使用它" : "环境变量未配置，生成 mihomo 配置时必须填写"
+    }`,
+    `sing-box 基础配置：${
+      env.SINGBOX_TEMPLATE_URL
+        ? "环境变量已配置，留空即使用它"
+        : "环境变量未配置，生成 sing-box 配置时必须填写"
     }`,
   ].join(" · ");
 
@@ -141,6 +150,7 @@ function buildPlaceholders(env: Env): Record<string, string> {
     __SUBS_PLACEHOLDER__: escapeHtml(subs).replace(/\n/g, "&#10;"),
     __CONFIG_PLACEHOLDER__: escapeHtml(config),
     __TEMPLATE_PLACEHOLDER__: escapeHtml(template),
+    __SBOX_TEMPLATE_PLACEHOLDER__: escapeHtml(sboxTemplate),
     __ENV_NOTE__: escapeHtml(note),
   };
 }
@@ -198,16 +208,25 @@ export default {
           "分流配置",
         );
         const target = pickTarget(url.searchParams.get("target"), request.headers.get("user-agent"));
-        // 模板只在生成 mihomo 配置时参与拼接，sing-box 是重新生成的骨架，不需要它
+        // mihomo 的 YAML 模板只在生成 mihomo 配置时参与拼接
         const templateUrl = pickOptional(url.searchParams.get("template"), env.TEMPLATE_URL);
         if (target === "clash" && !templateUrl) {
           throw missingConfig("TEMPLATE_URL", "template", "基础模板");
+        }
+        // sing-box 的基础配置（fakeip.json 之类）单独一套，生成 sing-box 时必须提供
+        const singboxTemplateUrl = pickOptional(
+          url.searchParams.get("sbox_template"),
+          env.SINGBOX_TEMPLATE_URL,
+        );
+        if (target === "singbox" && !singboxTemplateUrl) {
+          throw missingConfig("SINGBOX_TEMPLATE_URL", "sbox_template", "sing-box 基础配置");
         }
 
         const result = await runConvert({
           subscribeMapRaw,
           configRaw,
           templateUrl,
+          singboxTemplateUrl,
           target,
           allowLocal: readFlag(env.ALLOW_LOCAL_FETCH, "ALLOW_LOCAL_FETCH"),
         });

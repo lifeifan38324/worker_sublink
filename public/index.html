@@ -241,7 +241,7 @@
         <div class="field">
           <div class="label">
             <span>基础规则配置</span>
-            <em>模板文件链接</em>
+            <em>mihomo 模板链接</em>
           </div>
           <textarea
             id="template"
@@ -250,7 +250,22 @@
             autocomplete="off"
             placeholder="__TEMPLATE_PLACEHOLDER__"
           ></textarea>
-          <div class="tip">提供 DNS、TUN 等基础字段，转换时会保留注释并替换节点、分组、规则三段。留空则使用环境变量 TEMPLATE_URL；两者都没有时生成 mihomo 配置会报错，sing-box 不需要模板。</div>
+          <div class="tip">mihomo 专用：提供 DNS、TUN 等基础字段，转换时保留注释并替换节点、分组、规则三段。留空则使用环境变量 TEMPLATE_URL；两者都没有时生成 mihomo 配置会报错。</div>
+        </div>
+
+        <div class="field">
+          <div class="label">
+            <span>基础配置（sing-box）</span>
+            <em>JSON，fakeip / TUN 骨架</em>
+          </div>
+          <textarea
+            id="sbox-template"
+            rows="2"
+            spellcheck="false"
+            autocomplete="off"
+            placeholder="__SBOX_TEMPLATE_PLACEHOLDER__"
+          ></textarea>
+          <div class="tip">sing-box 专用：如 android/1.15/fakeip.json，DNS / TUN / fakeip / experimental 全部保留，只替换 outbounds、route 的规则、规则集和 final。留空则使用环境变量 SINGBOX_TEMPLATE_URL；两者都没有时生成 sing-box 会直接报错。</div>
         </div>
 
         <div class="actions">
@@ -305,6 +320,7 @@
       const targetEl = document.getElementById("target");
       const configEl = document.getElementById("config");
       const templateEl = document.getElementById("template");
+      const sboxTemplateEl = document.getElementById("sbox-template");
       const submitBtn = document.getElementById("submit");
       const resetBtn = document.getElementById("reset");
       const errorEl = document.getElementById("error");
@@ -369,6 +385,8 @@
         if (config) params.set("config", config);
         const template = templateEl.value.trim();
         if (template) params.set("template", template);
+        const sboxTemplate = sboxTemplateEl.value.trim();
+        if (sboxTemplate) params.set("sbox_template", sboxTemplate);
         return location.origin + "/api/convert?" + params.toString();
       }
 
@@ -504,6 +522,7 @@
         subsEl.value = "";
         configEl.value = "";
         templateEl.value = "";
+        sboxTemplateEl.value = "";
         targetEl.value = "mihomo";
         errorEl.hidden = true;
         outputEl.hidden = true;

@@ -262,7 +262,14 @@ export function buildGroups(
       }
     }
 
-    if (cfg.type === "select" && !members.includes("DIRECT")) members.push("DIRECT");
+    // select 组自动补 DIRECT 当退路；但如果这一组只有 REJECT，补上 DIRECT 会把
+    // 「广告拦截」这类组变成「直连」，sing-box 也就无法把它当成纯拒绝策略了
+    const hasNonRejectMember = members.some(
+      (m) => m !== "REJECT" && m !== "REJECT-DROP" && m !== "PASS",
+    );
+    if (cfg.type === "select" && hasNonRejectMember && !members.includes("DIRECT")) {
+      members.push("DIRECT");
+    }
 
     if (members.length === 0) {
       members.push("DIRECT");
@@ -349,7 +356,7 @@ export async function buildRulePlan(
 
   for (let i = 0; i < config.rulesets.length; i++) {
     const rs = config.rulesets[i];
-    if (!groupNames.has(rs.useProxy)) {
+    if (!groupNames.has(rs.useProxy) && !BUILTIN_TARGETS.has(rs.useProxy)) {
       warnings.push(`规则集指向的分组「${rs.useProxy}」不存在，相关规则已跳过`);
       continue;
     }
@@ -380,8 +387,10 @@ export async function buildRulePlan(
 export interface ConvertParams {
   subscribeMapRaw: string;
   configRaw: string;
-  /** 基础模板地址，必填（由环境变量 TEMPLATE_URL 或参数 template 提供） */
+  /** mihomo 基础模板地址（YAML） */
   templateUrl: string;
+  /** sing-box 基础配置：链接或 JSON 文本（如 android/1.15/fakeip.json），生成 sing-box 时必填 */
+  singboxTemplateUrl: string;
   target: "clash" | "singbox";
   allowLocal: boolean;
 }
@@ -405,7 +414,37 @@ export interface ConvertResult {
 
 async function fetchTemplate(url: string, allowLocal: boolean) {
   return cached(`template:${url}`, 10 * 60_000, () =>
-    fetchText(url, { allowLocal, accept: "text/yaml,*/*" }),
+    fetchText(url, { allowLocal, accept: "text/yaml,application/json,*/*" }),
+  );
+}
+
+/** sing-box 基础配置拉取失败时说清楚是哪一项、地址是什么，不要让它看起来像订阅出问题 */
+async function fetchSingboxTemplate(url: string, allowLocal: boolean) {
+  try {
+    return await fetchTemplate(url, allowLocal);
+  } catch (err) {
+    if (err instanceof HttpError) {
+      throw new HttpError(err.status, `sing-box 基础配置拉取失败（${url}）：${err.message}`);
+    }
+    throw err;
+  }
+}
+
+/** 基础配置既可以给链接，也可以直接把 JSON 写进环境变量 / 请求参数 */
+async function loadSingboxTemplate(raw: string, allowLocal: boolean): Promise<string> {
+  const value = raw.trim();
+  if (!value) throw new HttpError(500, "缺少 sing-box 基础配置：内容为空");
+
+  if (/^https?:\/\//i.test(value)) {
+    const file = await fetchSingboxTemplate(value, allowLocal);
+    return file.text;
+  }
+
+  if (value.startsWith("{")) return value;
+
+  throw new HttpError(
+    500,
+    "sing-box 基础配置需要是 http(s) 链接或 JSON 对象，当前值既不是链接也不以 { 开头",
   );
 }
 
@@ -427,20 +466,30 @@ export async function runConvert(params: ConvertParams): Promise<ConvertResult> 
     throw new HttpError(500, "缺少订阅列表：内容为空，应提供至少一个订阅链接");
   }
 
-  // 模板只有生成 mihomo 配置时才用得上；sing-box 是重新生成的骨架
-  const needsTemplate = params.target === "clash";
-  const templateUrl = params.templateUrl.trim();
-  if (needsTemplate && !templateUrl) {
+  // mihomo 与 sing-box 都必须有基础配置，代码里不内置任何默认骨架
+  const needsClashTemplate = params.target === "clash";
+  const clashTemplateUrl = params.templateUrl.trim();
+  if (needsClashTemplate && !clashTemplateUrl) {
     throw new HttpError(500, "缺少基础模板：模板链接为空");
+  }
+  const singboxTemplateRaw = params.singboxTemplateUrl.trim();
+  if (params.target === "singbox" && !singboxTemplateRaw) {
+    throw new HttpError(
+      500,
+      "缺少 sing-box 基础配置：环境变量 SINGBOX_TEMPLATE_URL 未配置，请求参数 sbox_template 也没有提供",
+    );
   }
 
   const configText = await loadConfigText(params.configRaw, params.allowLocal);
   const configWarnings: string[] = [];
   const config = parseConvertConfig(configText, configWarnings);
 
-  const [{ nodes, results }, templateFile] = await Promise.all([
+  const [{ nodes, results }, templateFile, singboxTemplate] = await Promise.all([
     fetchSubscriptions(entries, params.allowLocal),
-    needsTemplate ? fetchTemplate(templateUrl, params.allowLocal) : Promise.resolve(null),
+    needsClashTemplate ? fetchTemplate(clashTemplateUrl, params.allowLocal) : Promise.resolve(null),
+    params.target === "singbox"
+      ? loadSingboxTemplate(singboxTemplateRaw, params.allowLocal)
+      : Promise.resolve(null),
   ]);
 
   if (nodes.length === 0) {
@@ -460,8 +509,16 @@ export async function runConvert(params: ConvertParams): Promise<ConvertResult> 
 
   let content: string;
   if (params.target === "singbox") {
-    const built = buildSingboxConfig({ nodes, groups, ruleEntries, final: finalPolicy });
+    if (!singboxTemplate) throw new HttpError(500, "缺少 sing-box 基础配置：未能加载基础配置内容");
+    const built = buildSingboxConfig({
+      nodes,
+      groups,
+      ruleEntries,
+      final: finalPolicy,
+      templateText: singboxTemplate,
+    });
     content = built.content;
+    warnings.push(...built.warnings);
     if (built.skippedTypes.length > 0) {
       warnings.push(`sing-box 输出不支持的节点类型，已跳过：${built.skippedTypes.join(", ")}`);
     }

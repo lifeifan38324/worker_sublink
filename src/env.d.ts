@@ -9,4 +9,6 @@ interface Env extends __BaseEnv_Env {
   subscribe_map?: string;
   CONVERT_CONFIG: string;
   TEMPLATE_URL: string;
+  /** sing-box 基础配置：http(s) 链接，或直接是 JSON 文本；生成 sing-box 时必填 */
+  SINGBOX_TEMPLATE_URL: string;
 }

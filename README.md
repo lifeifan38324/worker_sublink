@@ -7,12 +7,12 @@
 ```
 GET /api/convert
       │
-      ├─ subs     ── 多个机场订阅 ──┐
-      │                            ├─ 解析 ss/vmess/trojan/vless/hysteria2
-      ├─ config   ── 分流配置 ─────┤  建 proxy-groups、拉取规则列表
-      │                            │
-      └─ template ── 基础模板 ─────┴─ mihomo: 往 YAML 模板里写三段
-                                      sing-box: 重新生成 JSON 骨架
+      ├─ subs          ── 多个机场订阅 ──┐
+      │                                 ├─ 解析 ss/vmess/trojan/vless/hysteria2
+      ├─ config        ── 分流配置 ─────┤  建 proxy-groups、拉取规则列表
+      │                                 │
+      ├─ template      ── mihomo 模板 ──┴─ 往 YAML 里写 proxies / proxy-groups / rules
+      └─ sbox_template ── sing-box 基础配置 ── 保留 DNS/TUN/fakeip，替换 outbounds 与 route
 ```
 
 - 运行时：Cloudflare Workers（`workerd`），静态页由 Workers Static Assets 托管
@@ -27,11 +27,11 @@ GET /api/convert
 - **三种订阅内容都能吃**：Clash/mihomo YAML、Base64 包裹的 YAML、Base64 包裹的分享链接、明文分享链接。
 - **两种输出目标**：
   - `mihomo`：以你自己的 YAML 模板为骨架，只替换 `proxies` / `proxy-groups` / `rules`，**保留模板里的注释、DNS、TUN 等所有字段**。
-  - `sing-box`：重新生成一份完整 JSON（log / inbounds / outbounds / route），GEOIP、GEOSITE 自动转成远程 `rule_set`（`.srs`），适配 sing-box 1.11+。
+  - `sing-box`：以 `SINGBOX_TEMPLATE_URL`（如 `android/1.15/fakeip.json`）为骨架，**DNS / TUN / fakeip / experimental 全部保留**，只替换 `outbounds`、`route.rules`、`route.rule_set`、`route.final`；GEOIP、GEOSITE 自动转成远程 `rule_set`（`.srs`），模板里引用了旧出站的地方（DNS 的 `detour`、`clash_mode: Global`）会自动改指向你的主分组。
 - **分流配置驱动**：分组类型、正则筛选、组间引用、规则列表 URL、内联规则、`final` 兜底，全部写在 JSON 里。
 - **单页操作界面**：填表 → 生成订阅链接 → 复制/下载配置，带统计信息和黄色的「转换提示」。
 - **容错而不是整体失败**：某个订阅拉取失败、某条规则内核不支持、某个分组没匹配到节点，都会降级并给出警告，其余内容照常输出。
-- **配置零硬编码**：订阅、分流配置、模板三项默认值全部来自环境变量；缺失时返回 500 并明确指出缺哪个变量，不会偷偷用一个内置默认值。
+- **配置零硬编码**：订阅、分流配置、两个模板全部来自环境变量，代码里不内置任何默认模板；缺失时返回 500 并明确指出缺哪个变量。
 
 ---
 
@@ -50,13 +50,14 @@ npm install
 cp .dev.vars.example .dev.vars   # Windows: copy .dev.vars.example .dev.vars
 ```
 
-编辑 `.dev.vars`，至少填好订阅、分流配置、模板三项（字段说明见下一节）：
+编辑 `.dev.vars`：订阅和分流配置必填，两个模板按你要用的输出目标填（字段说明见下一节）：
 
 ```ini
 ALLOW_LOCAL_FETCH=true
 SUBSCRIBE_MAP=[{name=机场A,url=https://example.com/api/v1/client/subscribe?token=xxx}]
 CONVERT_CONFIG=https://example.com/config.json
 TEMPLATE_URL=https://example.com/template.yaml
+SINGBOX_TEMPLATE_URL=https://raw.githubusercontent.com/qixuancao/sing-box-config-templates/refs/heads/main/platforms/android/1.15/fakeip.json
 ```
 
 ### 3. 启动
@@ -71,7 +72,8 @@ npm run dev
 
 | 命令 | 作用 |
 | --- | --- |
-| `npm run dev` | 本地开发服务器（默认 8787，读 `.dev.vars`） |
+| `npm run dev` | 本地开发服务器（默认 8787，只监听 `127.0.0.1`，读 `.dev.vars`） |
+| `npm run dev:lan` | 同上，但监听 `0.0.0.0`，手机 / 局域网里的客户端也能访问 |
 | `npm run dev:remote` | 在 Cloudflare 边缘环境调试（会用到线上 secret） |
 | `npm run check` | `tsc --noEmit` 类型检查 |
 | `npm run types` | `wrangler types` 重新生成 `worker-configuration.d.ts` |
@@ -89,14 +91,15 @@ npm run dev
 | `SUBSCRIBE_MAP` | 是 | secret | 订阅列表。支持 `[{name=机场A,url=https://...}]` 自定义写法，或 JSON 数组 `[{"name":"机场A","url":"https://...","ua":"clash.meta"}]`。也可以用页面上的「每行一条：名称 链接」覆盖。 |
 | `CONVERT_CONFIG` | 是 | secret | 分流配置。可以是 **URL**，也可以直接是 **JSON 文本**（含 `proxy_group` 与 `ruleset`）。 |
 | `TEMPLATE_URL` | 生成 mihomo 时必填 | secret | 基础模板 YAML 的地址。生成 sing-box 时完全不使用它，也不会去请求。 |
+| `SINGBOX_TEMPLATE_URL` | 生成 sing-box 时必填 | secret | sing-box 基础配置。可以是 **URL**，也可以直接是 **JSON 文本**（含 `dns` / `inbounds` / `route` 等骨架）。代码里不内置默认值，缺了会返回 500。 |
 | `ALLOW_LOCAL_FETCH` | 否 | var | 是否允许拉取 `127.0.0.1`、`localhost`、`*.local` 等内网地址。只接受 `true` / `false`，默认 `false`；写成别的值会直接报 500。**线上必须保持 `false`**（防 SSRF）。 |
 
-> 前三项含订阅 token，线上只能以 secret 形式存在；`wrangler.jsonc` 的 `vars` 里只能放 `ALLOW_LOCAL_FETCH`，否则会因同名冲突部署失败。
+> 这几项都含订阅 token 或私有地址，线上统一用 secret 存储；`wrangler.jsonc` 的 `vars` 里只能放 `ALLOW_LOCAL_FETCH`，否则会因同名冲突部署失败。
 
 ### 取值优先级
 
 ```
-请求参数（subs / config / template）  >  环境变量
+请求参数（subs / config / template / sbox_template）  >  环境变量
 ```
 
 页面上留空的字段不会出现在生成的链接里，服务端自动回落到环境变量——所以订阅 token 可以只存在 Worker 里，分享出去的链接只带 `target`。
@@ -128,11 +131,12 @@ npx wrangler deploy --var TEMPLATE_URL='https://...'
 1. **订阅链接**：每行一条 `名称 链接`，名称可省略（自动叫「订阅1」「订阅2」）。
 2. **客户端**：选 `mihomo` 或 `sing-box`。
 3. **分流配置**：填配置链接，或直接把 JSON 粘进来。
-4. **基础规则配置**：填模板 YAML 的链接（仅 mihomo 需要）。
-5. 点「生成订阅链接」，得到形如：
+4. **基础规则配置**：填 mihomo 模板 YAML 的链接（仅 mihomo 需要）。
+5. **基础配置（sing-box）**：填 sing-box 基础配置 JSON 的链接（仅 sing-box 用），例如 `android/1.15/fakeip.json`。
+6. 点「生成订阅链接」，得到形如：
 
 ```
-https://your-worker.workers.dev/api/convert?target=mihomo&subs=...&config=...&template=...
+https://your-worker.workers.dev/api/convert?target=singbox&subs=...&config=...&sbox_template=...
 ```
 
 这个地址可以直接填进 Clash Verge / mihomo / sing-box 客户端作为订阅。结果区还会显示节点数、分组数、规则数、耗时、体积、每个订阅的解析格式，以及可复制的完整配置（预览区只显示前 120 行，「复制」按钮复制的是全文）。
@@ -148,6 +152,12 @@ curl 'https://your-worker.workers.dev/api/convert?target=mihomo' \
   --data-urlencode 'config=https://example.com/config.json' \
   --data-urlencode 'template=https://example.com/template.yaml' \
   -o config.yaml
+
+# sing-box（Android，fakeip）
+curl 'https://your-worker.workers.dev/api/convert?target=singbox' \
+  --get \
+  --data-urlencode 'sbox_template=https://raw.githubusercontent.com/qixuancao/sing-box-config-templates/refs/heads/main/platforms/android/1.15/fakeip.json' \
+  -o config.json
 
 # 只看统计，不返回配置正文
 curl '...&stats=1'
@@ -170,6 +180,7 @@ curl '...&stats=1'
 | `subs` | 是* | 订阅列表纯文本，每行 `名称 链接`。*不传则用 `SUBSCRIBE_MAP`。 |
 | `config` | 是* | 分流配置 URL 或 JSON 文本。*不传则用 `CONVERT_CONFIG`。 |
 | `template` | mihomo 必填* | 模板 YAML 地址。*不传则用 `TEMPLATE_URL`。 |
+| `sbox_template` | sing-box 必填* | sing-box 基础配置：URL 或 JSON 文本。*不传则用 `SINGBOX_TEMPLATE_URL`。 |
 | `target` | 否 | `mihomo` / `clash` / `meta` / `stash` → mihomo；`singbox` / `sing-box` / `sbox` → sing-box。不传时按 `User-Agent` 猜（含 `sing-box` 则 sing-box，否则 mihomo）。 |
 | `stats` | 否 | 传 `1` 时只返回统计 JSON，不返回配置正文。 |
 
@@ -186,10 +197,10 @@ curl '...&stats=1'
 | --- | --- |
 | 400 | 订阅行里没有 http(s) 链接、分流配置不是合法 JSON、缺少 `proxy_group`/`ruleset`、链接协议不对、访问内网地址被拒 |
 | 413 | 拉取内容超过 8 MB |
-| 500 | 三个必填配置缺失、`ALLOW_LOCAL_FETCH` 值非法、环境变量格式错误 |
-| 502 | 模板不是合法 YAML、所有订阅都没解析出节点 |
+| 500 | 必填配置缺失（订阅 / 分流配置 / 对应目标的模板）、`ALLOW_LOCAL_FETCH` 值非法、环境变量格式错误 |
+| 502 | 模板不是合法 YAML、sing-box 基础配置不是合法 JSON 或拉取失败、所有订阅都没解析出节点 |
 
-> 校验顺序是「订阅 → 分流配置 → 模板」，所以同时缺多个时，报的是最靠前的那个。sing-box 目标不会校验模板。
+> 校验顺序是「订阅 → 分流配置 → 模板」，所以同时缺多个时，报的是最靠前的那个。mihomo 只校验 `TEMPLATE_URL`，sing-box 只校验 `SINGBOX_TEMPLATE_URL`。
 
 ---
 
@@ -338,18 +349,22 @@ RULE-SET  NETWORK  MATCH
 
 | | mihomo | sing-box |
 | --- | --- | --- |
-| 骨架来源 | 你的 `TEMPLATE_URL` 模板 | 代码生成 |
-| 模板是否必需 | **是** | 否（不会请求） |
-| 保留注释 | 是（`yaml` 的 `parseDocument`） | — |
-| 写入内容 | `proxies`、`proxy-groups`、`rules`，缺 `mode` 时补 `rule` | `log`、`inbounds`、`outbounds`、`route` |
-| 入站 | 由模板决定 | `mixed`，`127.0.0.1:7890` |
+| 骨架来源 | `TEMPLATE_URL`（YAML） | `SINGBOX_TEMPLATE_URL`（JSON，如 `platforms/android/1.15/fakeip.json`） |
+| 模板是否必需 | **是** | **是**（代码里不内置默认骨架） |
+| 保留注释 | 是（`yaml` 的 `parseDocument`） | —（JSON 本身没有注释） |
+| 替换内容 | `proxies`、`proxy-groups`、`rules`，缺 `mode` 时补 `rule` | `outbounds`、`route.rules`、`route.rule_set`、`route.final` |
+| 保留内容 | 模板其余全部字段 | `log`、`dns`、`inbounds`（TUN）、`experimental`（fakeip 缓存）、`http_clients` 等其余字段 |
+| 入站 | 由模板决定 | 由模板决定（fakeip 模板是 `tun`） |
 | 节点 | 原样写入 | 转换 `ss` / `vmess` / `trojan` / `vless` / `hysteria2`，其它类型跳过并警告 |
 | 分组 | `select` / `url-test` / `fallback` / `load-balance` | `selector` / `urltest`（`load-balance` 降级为 `selector`） |
+| 拒绝策略 | `REJECT` 作为策略名 | `action: "reject"`（sing-box 1.13 已移除 `block` 出站）；只含 `REJECT`、或第一个成员就是 `REJECT` 的分组按「命中即拦截」处理，不再输出成出站 |
+| 规则顺序 | 按分流配置原顺序 | 域名类规则放在模板 `resolve` 动作之前，IP 类（GEOIP / IP-CIDR）放在 `resolve` 之后，和原模板一致 |
 | GEOIP / GEOSITE | 原样输出 | 转成远程 `rule_set`（`format: binary`，`.srs`），同时写入 `route.rule_set` |
 | 兜底 | 最后一条 `MATCH,<策略>` | `route.final` |
+| 模板里的旧出站引用 | 不涉及 | DNS 的 `detour`、`clash_mode: Global` 等指向模板自带出站（`select`/`GLOBAL`）的地方，自动改指向第一个分组 |
 | 无对应语法的规则 | 一般都有 | 跳过并警告，例如 `IP-ASN`、`IP-SUFFIX`、`SRC-GEOIP`、`RULE-SET`、`PROCESS-NAME-REGEX` |
 
-> sing-box 的 `rule_set` 前缀写死在 `src/targets/singbox.ts` 的 `RULE_SET_BASE`，默认指向 `SagerNet/sing-geoip`、`SagerNet/sing-geosite`。
+> sing-box 的 `rule_set` 优先复用基础配置里已有的同名条目（例如 `geosite-cn`、`geoip-cn` 直接沿用模板的 jsdelivr 镜像和 `http_client`）；模板里没有的（如 `geosite-category-ads-all`）按模板同源地址补，模板完全没有远程规则集时才退回 `SagerNet/sing-geoip`、`SagerNet/sing-geosite`（`src/targets/singbox.ts` 的 `RULE_SET_BASE`）。
 
 ---
 
@@ -365,10 +380,10 @@ worker_sublink/
 │   ├── rules.ts              # 规则类型白名单、规则列表解析、URL-REGEX 跳过、规则列表拉取与缓存
 │   ├── text-fetch.ts         # 统一 HTTP 拉取：UA、8MB 上限、超时、编码探测、内网地址拦截、HttpError
 │   ├── cache.ts              # 进程内 TTL 缓存（模板 / 规则列表共用，最多 40 条）
-│   ├── env.d.ts              # 三个 secret 变量的类型声明（wrangler types 不会生成）
+│   ├── env.d.ts              # secret 变量的类型声明（wrangler types 不会生成）
 │   └── targets/
 │       ├── clash.ts          # 往 YAML 模板写 proxies / proxy-groups / rules
-│       └── singbox.ts        # 生成 sing-box 1.11+ 配置，GEOIP/GEOSITE → rule_set
+│       └── singbox.ts        # 以 sing-box 基础配置为骨架，替换 outbounds / route 三块，GEOIP/GEOSITE → rule_set
 ├── public/
 │   ├── index.html            # 单页表单（无框架，原生 JS）
 │   └── _samples/             # 本地测试数据（订阅样例、分流配置、模板）
@@ -403,6 +418,7 @@ worker_sublink/
 | `sub-empty.txt` | 空订阅，用于测试「没解析出节点」 |
 | `convert-config.json` | 分流配置示例（分组 + 规则列表 + 内联 GEOIP） |
 | `tpl-mini.yaml` | 最小 mihomo 模板（含注释，可验证注释是否保留） |
+| `sbox-fakeip-android-1.15.json` | sing-box Android 1.15 fakeip 基础配置副本（DNS / TUN / fakeip / rule_set 齐全，可离线验证合并逻辑） |
 | `rules-a/b/c.list` | 规则列表，`rules-c.list` 里含 `URL-REGEX`，用于验证跳过逻辑 |
 
 启动 `npm run dev` 后可以这样试：
@@ -416,11 +432,12 @@ curl 'http://localhost:8787/api/convert?target=mihomo&stats=1' \
   --data-urlencode 'config=http://localhost:8787/_samples/convert-config.json' \
   --data-urlencode 'template=http://localhost:8787/_samples/tpl-mini.yaml'
 
-# sing-box（不需要 template）
+# sing-box（用样例里的 fakeip 基础配置，不联网也能跑）
 curl 'http://localhost:8787/api/convert?target=singbox&stats=1' \
   --get \
   --data-urlencode 'subs=样例B http://localhost:8787/_samples/sub-b.links.txt' \
-  --data-urlencode 'config=http://localhost:8787/_samples/convert-config.json'
+  --data-urlencode 'config=http://localhost:8787/_samples/convert-config.json' \
+  --data-urlencode 'sbox_template=http://localhost:8787/_samples/sbox-fakeip-android-1.15.json'
 ```
 
 把 `stats=1` 去掉就能拿到完整配置正文；加上 `-D -` 可以查看 `x-convert-stats` / `x-convert-warnings` 响应头。
@@ -432,13 +449,32 @@ curl 'http://localhost:8787/api/convert?target=singbox&stats=1' \
 ```bash
 npx wrangler login
 npm run check     # 先过类型检查
-npm run deploy    # 首次部署，创建 Worker 并上传 public/
+npm run deploy    # 部署，创建/更新 Worker 并上传 public/
 
-# 部署成功后再写三项配置（加密存储；不要同时写进 vars，否则同名冲突）
+# 部署成功后再写四项配置（加密存储；不要同时写进 vars，否则同名冲突）
 npx wrangler secret put SUBSCRIBE_MAP
 npx wrangler secret put CONVERT_CONFIG
-npx wrangler secret put TEMPLATE_URL
+npx wrangler secret put TEMPLATE_URL           # 需要 mihomo 输出时必填
+npx wrangler secret put SINGBOX_TEMPLATE_URL   # 需要 sing-box 输出时必填
 ```
+
+本地已经调通 `.dev.vars` 的话，也可以一次批量写入，省掉四次交互输入（值直接从 `.dev.vars` 取，不打印、不落盘）：
+
+```bash
+node -e "
+const fs = require('fs');
+const keys = ['SUBSCRIBE_MAP', 'CONVERT_CONFIG', 'TEMPLATE_URL', 'SINGBOX_TEMPLATE_URL'];
+const out = {};
+for (const line of fs.readFileSync('.dev.vars', 'utf8').split(/\r?\n/)) {
+  const m = /^([A-Z_]+)=(.*)$/.exec(line);
+  if (m && keys.includes(m[1])) out[m[1]] = m[2].trim();
+}
+fs.writeFileSync('secrets.json', JSON.stringify(out));
+"
+npx wrangler secret bulk secrets.json && rm secrets.json
+```
+
+> `secret bulk` 遇到同名 key 会直接覆盖，适合反复更新；`secret put` 在已存在时会要求确认。
 
 部署完成后访问 `https://worker-sublink.<你的子域>.workers.dev`。自定义域名可在 Cloudflare 控制台的 Worker → Settings → Domains & Routes 里绑定。
 
@@ -497,11 +533,34 @@ git check-ignore -v .dev.vars    # 有输出即说明被忽略规则命中，未
 **首页显示「环境变量未配置」**
 `.dev.vars` 没生效：确认文件名就是 `.dev.vars`（不是 `.dev.vars.txt`），并且在项目根目录；改完要重启 `npm run dev`。线上则确认执行过 `wrangler secret put`。
 
+**手机 / 局域网访问 `http://192.168.x.x:8787` 超时**
+`wrangler dev` 默认只监听 `127.0.0.1`，回环地址外根本连不进来（`netstat -ano | findstr :8787` 会看到 `127.0.0.1:8787` 而不是 `0.0.0.0:8787`）。改用：
+
+```bash
+npm run dev:lan          # 等价于 wrangler dev --ip 0.0.0.0 --port 8787
+```
+
+启动日志里会出现 `Ready on http://0.0.0.0:8787` 和本机所有可访问地址。另外两项要一起确认：
+
+1. **防火墙**：Windows 的安全中心里允许 `workerd.exe`（路径是本项目 `node_modules/@cloudflare/workerd-*/bin/workerd.exe`）入站；网络位置是「公用」时规则要覆盖「公用」配置文件。
+2. **手机和电脑在同一网段**：`ping` 通电脑 IP，访问 `http://电脑IP:8787/api/health` 应返回 `{"status":"ok","runtime":"workerd"}`。
+
+局域网调试时注意两类地址别搞混：Worker 跑在本机，它去拉 `subs` / `template` / `sbox_template` 用 `127.0.0.1:8787` 是可以的（`ALLOW_LOCAL_FETCH=true` 时才放行内网地址）；但**填进手机客户端的订阅链接**必须是 `http://电脑IP:8787/api/convert?...`，写 `127.0.0.1` 只会指向手机自己。
+
 **在 shell 里 `export` 了变量，但 Worker 读不到**
 wrangler 不读 shell 环境变量。用 `.dev.vars`、`--var`、`--env-file`，或线上 `secret put`。
 
 **生成 mihomo 报「缺少基础模板」**
-`TEMPLATE_URL` 和 `template` 参数都为空。填一个，或者改用 `target=singbox`（不需要模板）。
+`TEMPLATE_URL` 和 `template` 参数都为空。填一个，或者改用 `target=singbox`（不做 mihomo 模板校验）。
+
+**sing-box 输出报「缺少 sing-box 基础配置」**
+`SINGBOX_TEMPLATE_URL` 和 `sbox_template` 都为空。代码里不内置任何默认骨架，填一个即可（也可以直接把基础配置 JSON 粘进这个变量）。Android 上建议用 fakeip 模板：`platforms/android/1.15/fakeip.json`。
+
+**sing-box 基础配置拉取失败 / 不是合法 JSON**
+地址返回的不是 JSON（比如填成了 mihomo 的 YAML 模板），或源站不可达。改用返回 JSON 的地址，或把 JSON 直接写进 `SINGBOX_TEMPLATE_URL`。错误信息里会带上具体地址和原因。
+
+**sing-box 的 DNS 走了一个不存在的出站**
+不会发生：模板里 `detour` / `clash_mode: Global` 指向的模板自带出站（`select`、`GLOBAL`）会被自动改指向你分流配置里的第一个分组，提示框里会说明改到了哪个 tag。若第一个分组是 `🎯 全球直连` 这类只含 DIRECT 的组，建议把它放到 `proxy_group` 数组靠后。
 
 **分组是空的 / 只有 DIRECT**
 `regex-filter` 没匹配到任何节点，或者 `other-groups` 引用了不存在的分组。看黄色提示框里的具体警告，也可以先用 `stats=1` 确认订阅解析出了多少节点。
@@ -514,6 +573,9 @@ wrangler 不读 shell 环境变量。用 `.dev.vars`、`--var`、`--env-file`，
 
 **sing-box 里 GEOIP 报 `unevaluatedProperties`**
 本项目已经改用远程 `rule_set`（`.srs`），不再输出 `geoip` 字段。如果你手动改过输出，注意 sing-box 1.11 起规则里不允许直接写 `geoip` / `geosite`。
+
+**sing-box 1.13+ 不认 `block` 出站**
+1.13 已移除 `block` / `dns` 两个旧出站。所以只含 `REJECT`、或默认成员（第一个）是 `REJECT` 的分组（典型是广告拦截组 `["REJECT","DIRECT"]`）按「命中即拦截」处理：不输出成出站，指向它的规则写成 `{ "action": "reject" }`。代价是客户端里少了「一键切到 DIRECT」的选项，转换提示里会逐条说明；真想保留开关，就把它拆成「只含 REJECT 的组」+「只含 DIRECT 的组」两条规则集。混在 selector 里、且不是第一个成员的 `REJECT` 会被忽略（默认策略不受影响）。
 
 **改了 `wrangler.jsonc` 的 `vars`，类型报错**
 跑 `npm run types` 重新生成 `worker-configuration.d.ts`。如果新增的是 secret（不在 `vars` 里），要到 `src/env.d.ts` 手工补类型。
