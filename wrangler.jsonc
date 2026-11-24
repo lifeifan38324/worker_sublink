@@ -7,7 +7,7 @@
     "enabled": true
   },
   // 只保留非敏感、可公开的变量。
-  // SUBSCRIBE_MAP / CONVERT_CONFIG / TEMPLATE_URL 必须用 secret 存储：
+  // SUBSCRIBE_MAP / CONVERT_CONFIG / MIHOMO_TEMPLATE_URL 必须用 secret 存储：
   // Cloudflare 不允许 secret 与同名 var 共存（会报 Binding name already in use）。
   // 这三个变量的类型在 src/env.d.ts 里声明。
   // 线上值用 `npx wrangler secret put 变量名` 写入。

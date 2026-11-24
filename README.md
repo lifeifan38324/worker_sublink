@@ -56,7 +56,7 @@ cp .dev.vars.example .dev.vars   # Windows: copy .dev.vars.example .dev.vars
 ALLOW_LOCAL_FETCH=true
 SUBSCRIBE_MAP=[{name=机场A,url=https://example.com/api/v1/client/subscribe?token=xxx}]
 CONVERT_CONFIG=https://example.com/config.json
-TEMPLATE_URL=https://example.com/template.yaml
+MIHOMO_TEMPLATE_URL=https://example.com/template.yaml
 SINGBOX_TEMPLATE_URL=https://raw.githubusercontent.com/qixuancao/sing-box-config-templates/refs/heads/main/platforms/android/1.15/fakeip.json
 ```
 
@@ -90,7 +90,7 @@ npm run dev
 | --- | --- | --- | --- |
 | `SUBSCRIBE_MAP` | 是 | secret | 订阅列表。支持 `[{name=机场A,url=https://...}]` 自定义写法，或 JSON 数组 `[{"name":"机场A","url":"https://...","ua":"clash.meta"}]`。也可以用页面上的「每行一条：名称 链接」覆盖。 |
 | `CONVERT_CONFIG` | 是 | secret | 分流配置。可以是 **URL**，也可以直接是 **JSON 文本**（含 `proxy_group` 与 `ruleset`）。 |
-| `TEMPLATE_URL` | 生成 mihomo 时必填 | secret | 基础模板 YAML 的地址。生成 sing-box 时完全不使用它，也不会去请求。 |
+| `MIHOMO_TEMPLATE_URL` | 生成 mihomo 时必填 | secret | 基础模板 YAML 的地址。生成 sing-box 时完全不使用它，也不会去请求。 |
 | `SINGBOX_TEMPLATE_URL` | 生成 sing-box 时必填 | secret | sing-box 基础配置。可以是 **URL**，也可以直接是 **JSON 文本**（含 `dns` / `inbounds` / `route` 等骨架）。代码里不内置默认值，缺了会返回 500。 |
 | `ALLOW_LOCAL_FETCH` | 否 | var | 是否允许拉取 `127.0.0.1`、`localhost`、`*.local` 等内网地址。只接受 `true` / `false`，默认 `false`；写成别的值会直接报 500。**线上必须保持 `false`**（防 SSRF）。 |
 
@@ -113,13 +113,13 @@ npx wrangler secret put SUBSCRIBE_MAP
 
 # 临时覆盖单次命令（不落盘）
 npx wrangler dev --var SUBSCRIBE_MAP='[{name=测试,url=https://...}]'
-npx wrangler deploy --var TEMPLATE_URL='https://...'
+npx wrangler deploy --var MIHOMO_TEMPLATE_URL='https://...'
 ```
 
 注意三点：
 
 1. **`export SUBSCRIBE_MAP=...` 对 wrangler 无效**。wrangler 不会读取当前 shell 的环境变量，只认 `.dev.vars`、`--var`、`--env-file`、`wrangler.jsonc` 的 `vars`。
-2. **secret 与 var 不能同名**。Cloudflare 的 secret 和普通变量共用命名空间，所以 `SUBSCRIBE_MAP` / `CONVERT_CONFIG` / `TEMPLATE_URL` 只以 secret 形式存在，`wrangler.jsonc` 的 `vars` 里只留 `ALLOW_LOCAL_FETCH`。违反这一点会报 `Binding name 'XXX' already in use [code: 10053]`。
+2. **secret 与 var 不能同名**。Cloudflare 的 secret 和普通变量共用命名空间，所以 `SUBSCRIBE_MAP` / `CONVERT_CONFIG` / `MIHOMO_TEMPLATE_URL` / `SINGBOX_TEMPLATE_URL` 只以 secret 形式存在，`wrangler.jsonc` 的 `vars` 里只留 `ALLOW_LOCAL_FETCH`。违反这一点会报 `Binding name 'XXX' already in use [code: 10053]`。
 3. 因为 `wrangler types` 只根据 `vars` 和本地 `.dev.vars` 生成类型，刚克隆的仓库没有 `.dev.vars`，这三个变量就会缺类型，所以在 `src/env.d.ts` 里固定声明；新增 secret 时记得同步补。
 
 ---
@@ -179,7 +179,7 @@ curl '...&stats=1'
 | --- | --- | --- |
 | `subs` | 是* | 订阅列表纯文本，每行 `名称 链接`。*不传则用 `SUBSCRIBE_MAP`。 |
 | `config` | 是* | 分流配置 URL 或 JSON 文本。*不传则用 `CONVERT_CONFIG`。 |
-| `template` | mihomo 必填* | 模板 YAML 地址。*不传则用 `TEMPLATE_URL`。 |
+| `template` | mihomo 必填* | 模板 YAML 地址。*不传则用 `MIHOMO_TEMPLATE_URL`。 |
 | `sbox_template` | sing-box 必填* | sing-box 基础配置：URL 或 JSON 文本。*不传则用 `SINGBOX_TEMPLATE_URL`。 |
 | `target` | 否 | `mihomo` / `clash` / `meta` / `stash` → mihomo；`singbox` / `sing-box` / `sbox` → sing-box。不传时按 `User-Agent` 猜（含 `sing-box` 则 sing-box，否则 mihomo）。 |
 | `stats` | 否 | 传 `1` 时只返回统计 JSON，不返回配置正文。 |
@@ -200,7 +200,7 @@ curl '...&stats=1'
 | 500 | 必填配置缺失（订阅 / 分流配置 / 对应目标的模板）、`ALLOW_LOCAL_FETCH` 值非法、环境变量格式错误 |
 | 502 | 模板不是合法 YAML、sing-box 基础配置不是合法 JSON 或拉取失败、所有订阅都没解析出节点 |
 
-> 校验顺序是「订阅 → 分流配置 → 模板」，所以同时缺多个时，报的是最靠前的那个。mihomo 只校验 `TEMPLATE_URL`，sing-box 只校验 `SINGBOX_TEMPLATE_URL`。
+> 校验顺序是「订阅 → 分流配置 → 模板」，所以同时缺多个时，报的是最靠前的那个。mihomo 只校验 `MIHOMO_TEMPLATE_URL`，sing-box 只校验 `SINGBOX_TEMPLATE_URL`。
 
 ---
 
@@ -349,7 +349,7 @@ RULE-SET  NETWORK  MATCH
 
 | | mihomo | sing-box |
 | --- | --- | --- |
-| 骨架来源 | `TEMPLATE_URL`（YAML） | `SINGBOX_TEMPLATE_URL`（JSON，如 `platforms/android/1.15/fakeip.json`） |
+| 骨架来源 | `MIHOMO_TEMPLATE_URL`（YAML） | `SINGBOX_TEMPLATE_URL`（JSON，如 `platforms/android/1.15/fakeip.json`） |
 | 模板是否必需 | **是** | **是**（代码里不内置默认骨架） |
 | 保留注释 | 是（`yaml` 的 `parseDocument`） | —（JSON 本身没有注释） |
 | 替换内容 | `proxies`、`proxy-groups`、`rules`，缺 `mode` 时补 `rule` | `outbounds`、`route.rules`、`route.rule_set`、`route.final` |
@@ -454,7 +454,7 @@ npm run deploy    # 部署，创建/更新 Worker 并上传 public/
 # 部署成功后再写四项配置（加密存储；不要同时写进 vars，否则同名冲突）
 npx wrangler secret put SUBSCRIBE_MAP
 npx wrangler secret put CONVERT_CONFIG
-npx wrangler secret put TEMPLATE_URL           # 需要 mihomo 输出时必填
+npx wrangler secret put MIHOMO_TEMPLATE_URL    # 需要 mihomo 输出时必填
 npx wrangler secret put SINGBOX_TEMPLATE_URL   # 需要 sing-box 输出时必填
 ```
 
@@ -463,7 +463,7 @@ npx wrangler secret put SINGBOX_TEMPLATE_URL   # 需要 sing-box 输出时必填
 ```bash
 node -e "
 const fs = require('fs');
-const keys = ['SUBSCRIBE_MAP', 'CONVERT_CONFIG', 'TEMPLATE_URL', 'SINGBOX_TEMPLATE_URL'];
+const keys = ['SUBSCRIBE_MAP', 'CONVERT_CONFIG', 'MIHOMO_TEMPLATE_URL', 'SINGBOX_TEMPLATE_URL'];
 const out = {};
 for (const line of fs.readFileSync('.dev.vars', 'utf8').split(/\r?\n/)) {
   const m = /^([A-Z_]+)=(.*)$/.exec(line);
@@ -551,7 +551,7 @@ npm run dev:lan          # 等价于 wrangler dev --ip 0.0.0.0 --port 8787
 wrangler 不读 shell 环境变量。用 `.dev.vars`、`--var`、`--env-file`，或线上 `secret put`。
 
 **生成 mihomo 报「缺少基础模板」**
-`TEMPLATE_URL` 和 `template` 参数都为空。填一个，或者改用 `target=singbox`（不做 mihomo 模板校验）。
+`MIHOMO_TEMPLATE_URL` 和 `template` 参数都为空。填一个，或者改用 `target=singbox`（不做 mihomo 模板校验）。
 
 **sing-box 输出报「缺少 sing-box 基础配置」**
 `SINGBOX_TEMPLATE_URL` 和 `sbox_template` 都为空。代码里不内置任何默认骨架，填一个即可（也可以直接把基础配置 JSON 粘进这个变量）。Android 上建议用 fakeip 模板：`platforms/android/1.15/fakeip.json`。

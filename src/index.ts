@@ -125,9 +125,9 @@ function buildPlaceholders(env: Env): Record<string, string> {
     ? clip(maskSecrets(env.CONVERT_CONFIG))
     : "留空则使用环境变量 CONVERT_CONFIG；也可以直接粘贴分流 JSON 或配置链接";
 
-  const template = env.TEMPLATE_URL
-    ? clip(maskSecrets(env.TEMPLATE_URL))
-    : "未配置：生成 mihomo 配置前请设置环境变量 TEMPLATE_URL，或在此填入模板链接";
+  const template = env.MIHOMO_TEMPLATE_URL
+    ? clip(maskSecrets(env.MIHOMO_TEMPLATE_URL))
+    : "未配置：生成 mihomo 配置前请设置环境变量 MIHOMO_TEMPLATE_URL，或在此填入模板链接";
 
   const sboxTemplate = env.SINGBOX_TEMPLATE_URL
     ? clip(maskSecrets(env.SINGBOX_TEMPLATE_URL))
@@ -137,7 +137,7 @@ function buildPlaceholders(env: Env): Record<string, string> {
     `订阅：${subCount > 0 ? `环境变量已配置 ${subCount} 条，留空即使用它` : "环境变量未配置，必须填写"}`,
     `分流配置：${env.CONVERT_CONFIG ? "环境变量已配置，留空即使用它" : "环境变量未配置，必须填写"}`,
     `基础规则：${
-      env.TEMPLATE_URL ? "环境变量已配置，留空即使用它" : "环境变量未配置，生成 mihomo 配置时必须填写"
+      env.MIHOMO_TEMPLATE_URL ? "环境变量已配置，留空即使用它" : "环境变量未配置，生成 mihomo 配置时必须填写"
     }`,
     `sing-box 基础配置：${
       env.SINGBOX_TEMPLATE_URL
@@ -209,9 +209,9 @@ export default {
         );
         const target = pickTarget(url.searchParams.get("target"), request.headers.get("user-agent"));
         // mihomo 的 YAML 模板只在生成 mihomo 配置时参与拼接
-        const templateUrl = pickOptional(url.searchParams.get("template"), env.TEMPLATE_URL);
+        const templateUrl = pickOptional(url.searchParams.get("template"), env.MIHOMO_TEMPLATE_URL);
         if (target === "clash" && !templateUrl) {
-          throw missingConfig("TEMPLATE_URL", "template", "基础模板");
+          throw missingConfig("MIHOMO_TEMPLATE_URL", "template", "基础模板");
         }
         // sing-box 的基础配置（fakeip.json 之类）单独一套，生成 sing-box 时必须提供
         const singboxTemplateUrl = pickOptional(

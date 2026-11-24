@@ -1,7 +1,7 @@
 # 复制为 .dev.vars 后填入真实值；.dev.vars 不会被提交
 # 线上用 `npx wrangler secret put 变量名` 写入
 #
-# 注意：SUBSCRIBE_MAP / CONVERT_CONFIG 始终必填；TEMPLATE_URL 只在生成 mihomo 时必填，
+# 注意：SUBSCRIBE_MAP / CONVERT_CONFIG 始终必填；MIHOMO_TEMPLATE_URL 只在生成 mihomo 时必填，
 # SINGBOX_TEMPLATE_URL 只在生成 sing-box 时必填。缺失时接口不会使用任何内置默认值，
 # 而是返回 500 并说明缺哪个变量。
 
@@ -17,7 +17,7 @@ CONVERT_CONFIG=https://example.com/config.json
 
 # 基础模板 yaml：提供 DNS、TUN 等字段
 # 仅生成 mihomo 配置时需要；生成 sing-box 配置不会用它
-TEMPLATE_URL=https://example.com/template.yaml
+MIHOMO_TEMPLATE_URL=https://example.com/template.yaml
 
 # sing-box 基础配置：URL，或直接写 JSON 文本（含 dns / inbounds / route 等骨架）
 # 生成 sing-box 配置时必填；代码里不内置任何默认骨架
