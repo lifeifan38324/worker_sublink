@@ -8,7 +8,7 @@
 GET /api/convert
       │
       ├─ subs          ── 多个机场订阅 ──┐
-      │                                 ├─ 解析 ss/vmess/trojan/vless/hysteria2
+      │                                 ├─ 解析 ss/vmess/trojan/vless/hysteria2/anytls
       ├─ config        ── 分流配置 ─────┤  建 proxy-groups、拉取规则列表
       │                                 │
       ├─ template      ── mihomo 模板 ──┴─ 往 YAML 里写 proxies / proxy-groups / rules
@@ -239,7 +239,7 @@ https://example.com/another-sub
 | Clash/mihomo YAML | 直接解析 `proxies` 数组 |
 | Base64(YAML) | Base64 解码后再按 YAML 解析 |
 | Base64(分享链接) | Base64 解码后逐行解析 |
-| 明文分享链接 | 逐行解析 `ss://`、`vmess://`、`trojan://`、`vless://`、`hysteria2://` / `hy2://` |
+| 明文分享链接 | 逐行解析 `ss://`、`vmess://`、`trojan://`、`vless://`、`hysteria2://` / `hy2://`、`anytls://` |
 
 补充行为：
 
@@ -355,7 +355,7 @@ RULE-SET  NETWORK  MATCH
 | 替换内容 | `proxies`、`proxy-groups`、`rules`，缺 `mode` 时补 `rule` | `outbounds`、`route.rules`、`route.rule_set`、`route.final` |
 | 保留内容 | 模板其余全部字段 | `log`、`dns`、`inbounds`（TUN）、`experimental`（fakeip 缓存）、`http_clients` 等其余字段 |
 | 入站 | 由模板决定 | 由模板决定（fakeip 模板是 `tun`） |
-| 节点 | 原样写入 | 转换 `ss` / `vmess` / `trojan` / `vless` / `hysteria2`，其它类型跳过并警告 |
+| 节点 | 原样写入 | 转换 `ss` / `vmess` / `trojan` / `vless` / `hysteria2` / `anytls`，其它类型（tuic、ssr、snell 等）跳过并警告 |
 | 分组 | `select` / `url-test` / `fallback` / `load-balance` | `selector` / `urltest`（`load-balance` 降级为 `selector`） |
 | 拒绝策略 | `REJECT` 作为策略名 | `action: "reject"`（sing-box 1.13 已移除 `block` 出站）；只含 `REJECT`、或第一个成员就是 `REJECT` 的分组按「命中即拦截」处理，不再输出成出站 |
 | 规则顺序 | 按分流配置原顺序 | 域名类规则放在模板 `resolve` 动作之前，IP 类（GEOIP / IP-CIDR）放在 `resolve` 之后，和原模板一致 |
@@ -376,7 +376,7 @@ worker_sublink/
 │   ├── index.ts              # Worker 入口：路由、参数/环境变量解析、响应头打包、首页占位符注入
 │   ├── convert.ts            # 转换编排：解析分流配置、建组、拉规则、选择输出目标、汇总警告与统计
 │   ├── subscription.ts       # 订阅列表解析、订阅内容识别（YAML/Base64/分享链接）、节点去重/过滤/加前缀
-│   ├── links.ts              # ss / vmess / trojan / vless / hysteria2 分享链接 → ClashProxy
+│   ├── links.ts              # ss / vmess / trojan / vless / hysteria2 / anytls 分享链接 → ClashProxy
 │   ├── rules.ts              # 规则类型白名单、规则列表解析、URL-REGEX 跳过、规则列表拉取与缓存
 │   ├── text-fetch.ts         # 统一 HTTP 拉取：UA、8MB 上限、超时、编码探测、内网地址拦截、HttpError
 │   ├── cache.ts              # 进程内 TTL 缓存（模板 / 规则列表共用，最多 40 条）

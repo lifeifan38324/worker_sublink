@@ -293,6 +293,59 @@ function parseHysteria2(body: string, fallbackName: string): ClashProxy | null {
   return proxy;
 }
 
+/**
+ * anytls://<password>@<host>:<port>?sni=...&insecure=1&fp=chrome#名字
+ * 协议强制 TLS，密码里可能有特殊字符，按 URL 解码
+ */
+function parseAnyTls(body: string, fallbackName: string): ClashProxy | null {
+  let rest = body;
+  let name = fallbackName;
+  const hash = rest.indexOf("#");
+  if (hash >= 0) {
+    name = safeName(rest.slice(hash + 1), fallbackName);
+    rest = rest.slice(0, hash);
+  }
+
+  const at = rest.lastIndexOf("@");
+  if (at < 0) return null;
+  const password = safeName(rest.slice(0, at), "");
+  const tail = rest.slice(at + 1);
+
+  const qm = tail.indexOf("?");
+  const hostPart = qm >= 0 ? tail.slice(0, qm) : tail;
+  const params = new URLSearchParams(qm >= 0 ? tail.slice(qm + 1) : "");
+
+  const hp = parseHostPort(hostPart);
+  if (!hp) return null;
+
+  const proxy: ClashProxy = {
+    name,
+    type: "anytls",
+    server: hp.server,
+    port: hp.port,
+    password,
+    udp: true,
+  };
+
+  const sni = params.get("sni") || params.get("peer") || params.get("servername") || "";
+  if (sni) proxy.sni = sni;
+
+  const fingerprint = params.get("fp") || params.get("client-fingerprint");
+  if (fingerprint) proxy["client-fingerprint"] = fingerprint;
+
+  if (params.get("insecure") === "1" || params.get("allowInsecure") === "1") {
+    proxy["skip-cert-verify"] = true;
+  }
+
+  const alpn = params.get("alpn");
+  if (alpn) {
+    const list = alpn.split(",").map((item) => item.trim()).filter(Boolean);
+    if (list.length > 0) proxy.alpn = list;
+  }
+
+  return proxy;
+}
+
 export function parseShareLink(line: string, index: number): ClashProxy | null {
   const raw = line.trim();
   if (!raw) return null;
@@ -311,9 +364,11 @@ export function parseShareLink(line: string, index: number): ClashProxy | null {
     case "hysteria2":
     case "hy2":
       return parseHysteria2(body, fallback);
+    case "anytls":
+      return parseAnyTls(body, fallback);
     default:
       return null;
   }
 }
 
-export const SUPPORTED_SCHEMES = ["ss", "vmess", "trojan", "vless", "hysteria2", "hy2"];
+export const SUPPORTED_SCHEMES = ["ss", "vmess", "trojan", "vless", "hysteria2", "hy2", "anytls"];

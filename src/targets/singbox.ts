@@ -158,6 +158,23 @@ function convertNode(node: ClashProxy): Obj | null {
       return out;
     }
 
+    // sing-box 1.12+ 支持 anytls，协议本身强制 TLS，所以 tls 段必须有
+    case "anytls": {
+      const out: Obj = {
+        type: "anytls",
+        ...base,
+        password: str(node.password),
+      };
+      out.tls = buildTls(node, true) ?? { enabled: true };
+
+      const alpn = node.alpn;
+      if (Array.isArray(alpn) && alpn.length > 0) {
+        out.tls.alpn = alpn.map((item) => str(item)).filter(Boolean);
+      }
+
+      return out;
+    }
+
     default:
       return null;
   }
